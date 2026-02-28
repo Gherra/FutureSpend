@@ -8,6 +8,7 @@ import NomiInsights from './components/NomiInsights';
 import CashFlowForecast from './components/CashFlowForecast';
 import SavingsStrategies from './components/SavingsStrategies';
 import Leaderboard from './components/Leaderboard';
+import Achievements from './components/Achievements';
 import Scanner from './components/Scanner';
 import { useLocalStorage } from './hooks/useLocalStorage';
 import { SEED_EVENTS, MOCK_FRIENDS, WEEKLY_BUDGET_DEFAULT } from './data/mockData';
@@ -48,8 +49,11 @@ export default function App() {
   const [page, setPage] = useState<'dashboard' | 'scanner'>('dashboard');
   const [events, setEvents] = useLocalStorage<CalendarEvent[]>('futurespend-events', initEvents());
   const [streak, setStreak] = useLocalStorage<number>('futurespend-streak', 4);
+  const [weeklyBudget, setWeeklyBudget] = useLocalStorage<number>('futurespend-budget', WEEKLY_BUDGET_DEFAULT);
+  const [damageControlActed, setDamageControlActed] = useLocalStorage<number>('futurespend-damage-acted', 0);
   const [toast, setToast] = useState<string | null>(null);
-  const weeklyBudget = WEEKLY_BUDGET_DEFAULT;
+  // resetKey forces NomiInsights / SavingsStrategies / Leaderboard to remount on full reset
+  const [resetKey, setResetKey] = useState(0);
 
   const totalSpend = useMemo(() => {
     const now = new Date();
@@ -69,7 +73,16 @@ export default function App() {
   const handleAddEvent    = (e: CalendarEvent) => setEvents((prev) => [...prev, e]);
   const handleEditEvent   = (u: CalendarEvent) => setEvents((prev) => prev.map((e) => (e.id === u.id ? u : e)));
   const handleDeleteEvent = (id: string)       => setEvents((prev) => prev.filter((e) => e.id !== id));
-  const handleResetDemo   = () => { setEvents(SEED_EVENTS); showToast('Demo events restored — ready to present!'); };
+
+  const handleResetDemo = () => {
+    setEvents(SEED_EVENTS);
+    setWeeklyBudget(WEEKLY_BUDGET_DEFAULT);
+    setDamageControlActed(0);
+    setResetKey((k) => k + 1);
+    showToast('Demo events restored — ready to present!');
+  };
+
+  const handleDamageControlAct = () => setDamageControlActed((prev) => prev + 1);
 
   const showToast = (msg: string) => setToast(msg);
 
@@ -81,6 +94,8 @@ export default function App() {
       events={events}
       onDeleteEvent={handleDeleteEvent}
       onShowToast={showToast}
+      onUpdateBudget={setWeeklyBudget}
+      onDamageControlAct={handleDamageControlAct}
     />
   );
 
@@ -101,7 +116,7 @@ export default function App() {
         {page === 'dashboard' ? (
           <>
             {/* Row 1: NOMI Insights */}
-            <NomiInsights events={events} />
+            <NomiInsights key={resetKey} events={events} />
 
             {/* Row 2: Event Board | Sidebar */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 items-start">
@@ -118,9 +133,15 @@ export default function App() {
               <div className="space-y-4">
                 <div className="hidden lg:block">{hydeOMeter}</div>
                 <JekyllStreak streak={streak} />
+                <Achievements
+                  streak={streak}
+                  damageControlActed={damageControlActed}
+                  totalSpend={totalSpend}
+                  weeklyBudget={weeklyBudget}
+                />
                 <CashFlowForecast events={events} />
-                <SavingsStrategies events={events} />
-                <Leaderboard friends={MOCK_FRIENDS} totalSpend={totalSpend} />
+                <SavingsStrategies key={resetKey} events={events} />
+                <Leaderboard key={resetKey} friends={MOCK_FRIENDS} totalSpend={totalSpend} />
               </div>
             </div>
           </>

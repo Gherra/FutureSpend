@@ -10,6 +10,8 @@ interface Props {
 
 export default function Leaderboard({ friends, totalSpend }: Props) {
   const [joinedChallenges, setJoinedChallenges] = useState<Set<string>>(new Set());
+  const [joinedCommunity, setJoinedCommunity] = useState(false);
+  const [communityCount, setCommunityCount] = useState(12);
 
   const sorted = friends
     .map((f) => (f.name === 'You' ? { ...f, weeklySpend: totalSpend } : f))
@@ -19,6 +21,16 @@ export default function Leaderboard({ friends, totalSpend }: Props) {
 
   const handleJoin = (ch: Challenge) => {
     setJoinedChallenges(new Set([...joinedChallenges, ch.id]));
+  };
+
+  const handleCommunityToggle = () => {
+    if (!joinedCommunity) {
+      setJoinedCommunity(true);
+      setCommunityCount((n) => n + 1);
+    } else {
+      setJoinedCommunity(false);
+      setCommunityCount((n) => n - 1);
+    }
   };
 
   return (
@@ -89,6 +101,37 @@ export default function Leaderboard({ friends, totalSpend }: Props) {
       {/* Divider */}
       <div className="mb-3" style={{ borderTop: '1px solid #EEF3F8' }} />
 
+      {/* ── Community challenge banner ── */}
+      <div
+        className="rounded-xl p-3 mb-3"
+        style={{ background: '#E8F2FB', border: '1px solid #B8D8F4' }}>
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-bold mb-0.5" style={{ color: '#0F1923' }}>
+              This week's community challenge
+            </p>
+            <p className="text-xs leading-relaxed" style={{ color: '#5A6880' }}>
+              Can you keep Social spending under $50 this weekend?{' '}
+              <span className="font-semibold" style={{ color: '#006AC3' }}>{communityCount} people</span> are trying.
+            </p>
+          </div>
+          <button
+            onClick={handleCommunityToggle}
+            className="flex-shrink-0 text-xs px-2.5 py-1 rounded-lg font-semibold transition-all"
+            style={joinedCommunity ? {
+              background: '#E6F9F0',
+              color: '#059669',
+              border: '1px solid #A7E8CB',
+            } : {
+              background: '#006AC3',
+              color: 'white',
+              border: '1px solid #006AC3',
+            }}>
+            {joinedCommunity ? '✓ Joined' : 'Join'}
+          </button>
+        </div>
+      </div>
+
       {/* Challenges */}
       <div>
         <div className="flex items-center gap-2 mb-2">
@@ -108,7 +151,7 @@ export default function Leaderboard({ friends, totalSpend }: Props) {
                   <div>
                     <div className="text-xs font-medium" style={{ color: '#0F1923' }}>{ch.title}</div>
                     <div className="text-xs" style={{ color: '#8FA3B8' }}>
-                      {ch.participants} joined · {ch.duration}
+                      {ch.participants + (joined ? 1 : 0)} joined · {ch.duration}
                     </div>
                   </div>
                 </div>

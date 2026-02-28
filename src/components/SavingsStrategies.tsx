@@ -96,8 +96,11 @@ export default function SavingsStrategies({ events }: Props) {
 
       {actions.length === 0 ? (
         <div className="text-center py-5">
-          <div className="text-2xl mb-1.5">✨</div>
-          <p className="text-xs" style={{ color: '#8FA3B8' }}>No events in the next 7 days to strategize around.</p>
+          <p className="text-xs" style={{ color: '#8FA3B8' }}>
+            {events.length === 0
+              ? 'Add events above to get personalized savings strategies.'
+              : 'No high-spend events in the next 7 days to strategize around.'}
+          </p>
         </div>
       ) : (
         <div className="space-y-2">

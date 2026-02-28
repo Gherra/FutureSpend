@@ -21,23 +21,17 @@ interface HydeOMeterProps {
   compact?: boolean;
 }
 
-// Three clean zones: safe / heads-up / critical
+// RBC blue → amber → muted red
 function getColor(pct: number): string {
-  if (pct < 0.33) return '#22C55E'; // green — safe
-  if (pct < 0.75) return '#F59E0B'; // amber — heads up
-  return '#DC2626';                  // red   — critical
+  if (pct < 0.5)  return '#006AC3'; // RBC blue — on track
+  if (pct < 0.75) return '#F59E0B'; // amber — approaching
+  return '#DC2626';                  // muted red — high risk
 }
 
 function getBadge(pct: number): { label: string; color: string; bg: string } {
-  if (pct < 0.33) return { label: 'On Track', color: '#15803D', bg: '#DCFCE7' };
-  if (pct < 0.75) return { label: 'Heads Up',  color: '#92400E', bg: '#FEF3C7' };
-  return              { label: 'Critical',   color: '#991B1B', bg: '#FEE2E2' };
-}
-
-function getStatusBg(pct: number): string {
-  if (pct < 0.33) return 'rgba(34,197,94,0.04)';
-  if (pct < 0.75) return 'rgba(245,158,11,0.04)';
-  return 'rgba(220,38,38,0.05)';
+  if (pct < 0.5)  return { label: 'On Track',          color: '#1E40AF', bg: '#EFF6FF' };
+  if (pct < 0.75) return { label: 'Approaching Limit', color: '#92400E', bg: '#FEF3C7' };
+  return              { label: 'High Risk Week',      color: '#991B1B', bg: '#FEE2E2' };
 }
 
 function buildDamageItems(events: CalendarEvent[]): DamageItem[] {
@@ -65,16 +59,37 @@ function buildDamageItems(events: CalendarEvent[]): DamageItem[] {
     .slice(0, 3);
 }
 
-// Polar → SVG cartesian for the gauge arc
-function arcPoint(cx: number, cy: number, R: number, t: number) {
-  const a = Math.PI * t;
-  return {
-    x: cx - R * Math.cos(a),
-    y: cy - R * Math.sin(a),
-  };
+// Build 7-day spend breakdown starting today
+function buildDailyBars(events: CalendarEvent[]): { label: string; amount: number; isToday: boolean }[] {
+  const DAY_ABBR = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(now);
+    d.setDate(d.getDate() + i);
+    const dateStr = d.toISOString().split('T')[0];
+    const amount = events
+      .filter((e) => e.date === dateStr)
+      .reduce((sum, e) => sum + predictCost(e.title, e.category, e.socialPressure).total, 0);
+    return { label: DAY_ABBR[d.getDay()], amount, isToday: i === 0 };
+  });
 }
 
 const roundTo5 = (n: number) => Math.max(20, Math.round(n / 5) * 5);
+
+// Ring geometry
+const RING_R    = 68;
+const RING_CX   = 95;
+const RING_CY   = 95;
+const RING_STROKE = 10;
+const CIRCUMFERENCE = 2 * Math.PI * RING_R;
+
+// Bar chart geometry
+const BAR_W   = 20;
+const BAR_GAP = 5;
+const MAX_BAR_H = 30;
+const CHART_W = 7 * BAR_W + 6 * BAR_GAP; // 170
+const CHART_H = MAX_BAR_H + 17;            // 47
 
 export default function HydeOMeter({
   totalSpend,
@@ -86,26 +101,19 @@ export default function HydeOMeter({
   onDamageControlAct,
   compact = false,
 }: HydeOMeterProps) {
-  const pct      = Math.min(totalSpend / weeklyBudget, 1);
-  const color    = getColor(pct);
-  const badge    = getBadge(pct);
-  const statusBg = getStatusBg(pct);
+  const pct        = Math.min(totalSpend / weeklyBudget, 1);
+  const color      = getColor(pct);
+  const badge      = getBadge(pct);
   const isCritical = pct >= 0.75;
+  const isHydeMoment = pct > 0.9;
+  const remaining  = Math.max(0, weeklyBudget - totalSpend);
+  const dashOffset = CIRCUMFERENCE * (1 - pct);
 
-  // Budget edit modal state
   const [showBudgetModal, setShowBudgetModal] = useState(false);
-  const [budgetInput, setBudgetInput] = useState(String(weeklyBudget));
+  const [budgetInput, setBudgetInput]         = useState(String(weeklyBudget));
 
-  // SVG geometry
-  const R  = 78;
-  const cx = 100;
-  const cy = 104;
-
-  // Needle rotation: -90° at left (pct=0) → +90° at right (pct=1)
-  const needleAngle = -90 + pct * 180;
-
-  // "Budget" label position — outside arc at t=0.33
-  const budgetLabelPt = arcPoint(cx, cy, R + 18, 0.33);
+  const dailyBars = useMemo(() => buildDailyBars(events), [events]);
+  const maxBarAmt = Math.max(...dailyBars.map((b) => b.amount), 10);
 
   const damageItems = useMemo(
     () => (isCritical ? buildDamageItems(events) : []),
@@ -120,7 +128,6 @@ export default function HydeOMeter({
     );
   };
 
-  // Budget modal preset amounts (based on current predicted spend)
   const conservativeAmt = roundTo5(totalSpend * 0.7);
   const balancedAmt     = roundTo5(totalSpend);
   const flexibleAmt     = roundTo5(totalSpend * 1.3);
@@ -133,6 +140,7 @@ export default function HydeOMeter({
     }
   };
 
+  // ── Compact mode (header strip) ──
   if (compact) {
     return (
       <div className="flex items-center gap-2">
@@ -151,8 +159,8 @@ export default function HydeOMeter({
         className="nomi-card p-4"
         style={{
           borderTop: `3px solid ${color}`,
-          background: statusBg,
-          transition: 'background 0.6s ease',
+          background: isHydeMoment ? 'rgba(220,38,38,0.025)' : 'white',
+          transition: 'background 0.7s ease',
         }}>
 
         {/* ── Header ── */}
@@ -164,120 +172,123 @@ export default function HydeOMeter({
             {badge.label}
           </span>
         </div>
-        <p className="text-xs mb-1" style={{ color: '#8FA3B8' }}>Predicted spend vs weekly budget</p>
+        <p className="text-xs mb-3" style={{ color: '#8FA3B8' }}>Predicted spend vs weekly target</p>
 
-        {/* ── SVG Gauge ── */}
-        <div className="flex justify-center">
-          <svg width="200" height="120" viewBox="0 0 200 120">
-            <defs>
-              {/* Full spectrum gradient: always green → amber → red */}
-              <linearGradient id="arc-grad" x1="0%" y1="0%" x2="100%" y2="0%">
-                <stop offset="0%"   stopColor="#22C55E" />
-                <stop offset="36%"  stopColor="#F59E0B" />
-                <stop offset="70%"  stopColor="#EA580C" />
-                <stop offset="100%" stopColor="#DC2626" />
-              </linearGradient>
-            </defs>
-
-            {/* ── Full gradient arc track — always fully visible ── */}
-            <path
-              d={`M ${cx - R} ${cy} A ${R} ${R} 0 0 1 ${cx + R} ${cy}`}
+        {/* ── Circular ring with text overlay ── */}
+        <div className="relative flex justify-center mb-1">
+          <svg
+            width="190" height="190"
+            viewBox="0 0 190 190"
+            aria-label={`${Math.round(pct * 100)}% of weekly budget`}>
+            {/* Base track */}
+            <circle
+              cx={RING_CX} cy={RING_CY} r={RING_R}
               fill="none"
-              stroke="url(#arc-grad)"
-              strokeWidth="13"
-              strokeLinecap="round"
+              stroke="#EEF3F8"
+              strokeWidth={RING_STROKE}
             />
-
-            {/* ── Tick at budget threshold (t=0.33) ── */}
-            {(() => {
-              const inner = arcPoint(cx, cy, R - 7, 0.33);
-              const outer = arcPoint(cx, cy, R + 7, 0.33);
-              return (
-                <line
-                  x1={inner.x} y1={inner.y}
-                  x2={outer.x} y2={outer.y}
-                  stroke="white" strokeWidth="2.5" strokeLinecap="round"
-                />
-              );
-            })()}
-
-            {/* ── "Budget" label at threshold ── */}
-            <text
-              x={budgetLabelPt.x}
-              y={budgetLabelPt.y + 4}
-              textAnchor="middle"
-              fontSize="7.5"
-              fontFamily="Inter, sans-serif"
-              fontWeight="700"
-              fill="#F59E0B">
-              Budget
-            </text>
-
-            {/* ── Tick marks at safe and critical ends ── */}
-            {[0, 1].map((t) => {
-              const inner = arcPoint(cx, cy, R - 7, t);
-              const outer = arcPoint(cx, cy, R + 7, t);
-              return (
-                <line key={t}
-                  x1={inner.x} y1={inner.y}
-                  x2={outer.x} y2={outer.y}
-                  stroke="white" strokeWidth="2" strokeLinecap="round"
-                />
-              );
-            })}
-
-            {/* ── Zone labels: "Safe" left, "Critical" right ── */}
-            <text x={cx - R + 2} y="116"
-              fill="#22C55E" fontSize="8" fontFamily="Inter, sans-serif" fontWeight="700">
-              Safe
-            </text>
-            <text x={cx + R - 2} y="116"
-              fill="#DC2626" fontSize="8" fontFamily="Inter, sans-serif" fontWeight="700"
-              textAnchor="end">
-              Critical
-            </text>
-
-            {/* ── Needle ── */}
-            <g
-              className="gauge-needle"
-              style={{ transform: `rotate(${needleAngle}deg)`, transformOrigin: `${cx}px ${cy}px` }}>
-              <line
-                x1={cx} y1={cy}
-                x2={cx} y2={cy - R + 12}
-                stroke={color}
-                strokeWidth="2.5"
-                strokeLinecap="round"
-              />
-              <circle cx={cx} cy={cy} r="5.5" fill={color} />
-              <circle cx={cx} cy={cy} r="2.5"  fill="white" />
-            </g>
+            {/* Animated fill ring */}
+            <circle
+              cx={RING_CX} cy={RING_CY} r={RING_R}
+              fill="none"
+              stroke={color}
+              strokeWidth={RING_STROKE}
+              strokeLinecap="round"
+              strokeDasharray={CIRCUMFERENCE}
+              strokeDashoffset={dashOffset}
+              transform={`rotate(-90 ${RING_CX} ${RING_CY})`}
+              style={{
+                transition: 'stroke-dashoffset 0.85s cubic-bezier(0.25,0.46,0.45,0.94), stroke 0.5s ease',
+              }}
+            />
           </svg>
+
+          {/* Center text: dollar, target line, remaining */}
+          <div className="absolute inset-0 flex flex-col items-center justify-center">
+            <div
+              className="text-[28px] font-black font-mono leading-none"
+              style={{ color, transition: 'color 0.5s ease' }}>
+              ${totalSpend}
+            </div>
+
+            <div className="flex items-center gap-1 mt-1.5">
+              <span className="text-[11px]" style={{ color: '#8FA3B8' }}>
+                of ${weeklyBudget} target
+              </span>
+              {onUpdateBudget && (
+                <button
+                  onClick={() => { setBudgetInput(String(weeklyBudget)); setShowBudgetModal(true); }}
+                  className="inline-flex items-center p-0.5 rounded transition-all"
+                  style={{ color: '#C8D8E8', border: '1px solid #DDE5EE' }}
+                  onMouseEnter={(e) => { e.currentTarget.style.color = '#006AC3'; e.currentTarget.style.borderColor = '#006AC3'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.color = '#C8D8E8'; e.currentTarget.style.borderColor = '#DDE5EE'; }}
+                  title="Edit weekly target">
+                  <Pencil size={8} />
+                </button>
+              )}
+            </div>
+
+            <div
+              className="text-[11px] font-semibold mt-0.5"
+              style={{ color, transition: 'color 0.5s ease' }}>
+              Remaining: ${remaining}
+            </div>
+          </div>
         </div>
 
-        {/* ── Dollar readout ── */}
-        <div className="text-center -mt-2 mb-3">
-          <div
-            className="text-3xl font-black font-mono"
-            style={{ color, transition: 'color 0.5s ease' }}>
-            ${totalSpend}
-          </div>
-          <div className="text-xs mt-0.5 flex items-center justify-center gap-1.5 flex-wrap" style={{ color: '#8FA3B8' }}>
-            <span>of ${weeklyBudget} weekly budget</span>
-            <span className="font-semibold" style={{ color }}>
-              {Math.round(pct * 100)}%
-            </span>
-            {onUpdateBudget && (
-              <button
-                onClick={() => { setBudgetInput(String(weeklyBudget)); setShowBudgetModal(true); }}
-                className="inline-flex items-center gap-0.5 text-xs px-1.5 py-0.5 rounded-md transition-all"
-                style={{ color: '#8FA3B8', border: '1px solid #DDE5EE' }}
-                onMouseEnter={(e) => { e.currentTarget.style.color = '#006AC3'; e.currentTarget.style.borderColor = '#006AC3'; }}
-                onMouseLeave={(e) => { e.currentTarget.style.color = '#8FA3B8'; e.currentTarget.style.borderColor = '#DDE5EE'; }}>
-                <Pencil size={9} />
-                Edit
-              </button>
-            )}
-          </div>
+        {/* ── Hyde moment ── */}
+        {isHydeMoment && (
+          <p
+            className="text-center text-[11px] italic mb-2 slide-up"
+            style={{ color: 'rgba(220,38,38,0.6)', letterSpacing: '0.01em' }}>
+            Hyde is taking over your week.
+          </p>
+        )}
+
+        {/* ── Micro daily bar chart (Mon–Sun) ── */}
+        <div className="flex justify-center mb-4">
+          <svg
+            width={CHART_W} height={CHART_H}
+            viewBox={`0 0 ${CHART_W} ${CHART_H}`}>
+            {dailyBars.map((bar, i) => {
+              const x    = i * (BAR_W + BAR_GAP);
+              const barH = bar.amount > 0
+                ? Math.max(Math.round((bar.amount / maxBarAmt) * MAX_BAR_H), 3)
+                : 2;
+              const barY  = MAX_BAR_H - barH;
+              const barCX = x + BAR_W / 2;
+
+              return (
+                <g key={i}>
+                  {/* Track */}
+                  <rect
+                    x={x} y={0} width={BAR_W} height={MAX_BAR_H}
+                    rx={4} fill="#F0F4F8"
+                  />
+                  {/* Fill */}
+                  <rect
+                    x={x} y={barY} width={BAR_W} height={barH}
+                    rx={4}
+                    fill={color}
+                    style={{
+                      opacity: bar.isToday ? 1 : 0.55,
+                      transition: 'fill 0.5s ease',
+                    }}
+                  />
+                  {/* Day label */}
+                  <text
+                    x={barCX} y={MAX_BAR_H + 13}
+                    textAnchor="middle"
+                    fontSize="8"
+                    fontFamily="Inter, sans-serif"
+                    fontWeight={bar.isToday ? '700' : '400'}
+                    fill={bar.isToday ? color : '#8FA3B8'}>
+                    {bar.label}
+                  </text>
+                </g>
+              );
+            })}
+          </svg>
         </div>
 
         {/* ── Gradient fill progress bar ── */}
@@ -295,7 +306,7 @@ export default function HydeOMeter({
           />
         </div>
 
-        {/* ── Damage Control (critical only) ── */}
+        {/* ── Damage Control (triggered at ≥75%) ── */}
         {isCritical && damageItems.length > 0 && (
           <div
             className="rounded-xl p-3 slide-up"

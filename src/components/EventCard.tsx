@@ -8,6 +8,11 @@ interface Props {
   onDelete: (id: string) => void;
 }
 
+function formatTime(t: string): string {
+  const [h, m] = t.split(':').map(Number);
+  return `${h % 12 || 12}:${m.toString().padStart(2, '0')} ${h >= 12 ? 'PM' : 'AM'}`;
+}
+
 function formatDate(dateStr: string): string {
   const d = new Date(dateStr + 'T00:00:00');
   const today = new Date();
@@ -53,7 +58,9 @@ export default function EventCard({ event, breakdown, onEdit, onDelete }: Props)
             <span className={`inline-block text-xs px-2 py-0.5 rounded-md border cat-${event.category}`}>
               {event.category}
             </span>
-            <span className="text-xs" style={{ color: '#8FA3B8' }}>{dateLabel}</span>
+            <span className="text-xs" style={{ color: '#8FA3B8' }}>
+              {dateLabel}{event.time ? ` · ${formatTime(event.time)}` : ''}
+            </span>
           </div>
         </div>
 

@@ -1,8 +1,9 @@
 import { useState, useRef } from 'react';
-import { Search, ChevronDown, Loader2 } from 'lucide-react';
-import type { Category, ScanResult } from '../types';
+import { Search, ChevronDown, Loader2, CalendarPlus } from 'lucide-react';
+import type { CalendarEvent, Category, ScanResult } from '../types';
 import { predictCost, getSpendingTriggers, getWhyExplanation, getHistoricalContext } from '../utils/predictions';
 import { generatePersonalities } from '../utils/personalities';
+import AddEventModal from './AddEventModal';
 
 const CATEGORIES: Category[] = ['Work', 'Personal', 'Family', 'Social', 'Health'];
 
@@ -19,6 +20,8 @@ const EXAMPLE_EVENTS = [
 
 interface Props {
   onScanComplete?: (result: ScanResult) => void;
+  onAddEvent?: (event: CalendarEvent) => void;
+  existingEvents?: CalendarEvent[];
 }
 
 // Clean cost row with left-border accent — no emoji
@@ -27,11 +30,13 @@ function CostRow({
   amount,
   total,
   accentColor,
+  valueColor = '#0F1923',
 }: {
   label: string;
   amount: number;
   total: number;
   accentColor: string;
+  valueColor?: string;
 }) {
   const pct = total > 0 ? Math.min((amount / total) * 100, 100) : 0;
   if (amount === 0) return null;
@@ -53,7 +58,7 @@ function CostRow({
             }}
           />
         </div>
-        <span className="text-xs font-bold font-mono w-10 text-right" style={{ color: '#0F1923' }}>
+        <span className="text-xs font-bold font-mono w-10 text-right" style={{ color: valueColor, transition: 'color 0.3s ease' }}>
           ${amount}
         </span>
       </div>
@@ -61,13 +66,14 @@ function CostRow({
   );
 }
 
-export default function Scanner({ onScanComplete }: Props) {
+export default function Scanner({ onScanComplete, onAddEvent, existingEvents }: Props) {
   const [input, setInput] = useState('');
   const [category, setCategory] = useState<Category>('Social');
   const [pressure, setPressure] = useState(60);
   const [result, setResult] = useState<ScanResult | null>(null);
   const [scanning, setScanning] = useState(false);
   const [showExamples, setShowExamples] = useState(false);
+  const [showAddModal, setShowAddModal] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const handleScan = () => {
@@ -264,15 +270,44 @@ export default function Scanner({ onScanComplete }: Props) {
         </div>
       )}
 
-      {result && !scanning && <ScanResultView result={result} />}
+      {result && !scanning && (
+        <ScanResultView result={result} onAddToCalendar={onAddEvent ? () => setShowAddModal(true) : undefined} />
+      )}
+
+      {showAddModal && result && onAddEvent && (
+        <AddEventModal
+          onAdd={(ev) => { onAddEvent(ev); setShowAddModal(false); }}
+          onClose={() => setShowAddModal(false)}
+          prefill={{ title: result.event, category: result.category, socialPressure: result.socialPressure }}
+          existingEvents={existingEvents}
+        />
+      )}
     </div>
   );
 }
 
-function ScanResultView({ result }: { result: ScanResult }) {
-  const total = result.breakdown.total;
+function ScanResultView({ result, onAddToCalendar }: { result: ScanResult; onAddToCalendar?: () => void }) {
+  const [hydeLevel, setHydeLevel] = useState(50);
+
+  // Multiplier: Jekyll(0)=0.6×  Balanced(50)=1.0×  Hyde(100)=1.5×
+  const multiplier = hydeLevel <= 50
+    ? 0.6 + (hydeLevel / 50) * 0.4
+    : 1.0 + ((hydeLevel - 50) / 50) * 0.5;
+
+  const adjFood       = Math.round(result.breakdown.food       * multiplier);
+  const adjTransport  = Math.round(result.breakdown.transport  * multiplier);
+  const adjActivities = Math.round(result.breakdown.activities * multiplier);
+  const adjTotal      = adjFood + adjTransport + adjActivities;
+  const baseCost      = result.breakdown.total;
+  const diff          = adjTotal - baseCost;
+
+  const valueColor =
+    hydeLevel < 40 ? '#059669' :
+    hydeLevel < 55 ? '#5A6880' :
+    hydeLevel < 75 ? '#D97706' : '#DC2626';
+
   const totalColor =
-    total > 100 ? '#DC2626' : total > 60 ? '#EA580C' : total > 30 ? '#D97706' : '#006AC3';
+    adjTotal > 100 ? '#DC2626' : adjTotal > 60 ? '#EA580C' : adjTotal > 30 ? '#D97706' : '#006AC3';
 
   return (
     <div className="space-y-4 slide-up">
@@ -290,16 +325,16 @@ function ScanResultView({ result }: { result: ScanResult }) {
           </div>
           <div
             className="text-3xl font-black font-mono"
-            style={{ color: totalColor }}>
-            ${total}
+            style={{ color: totalColor, transition: 'color 0.3s ease' }}>
+            ${adjTotal}
           </div>
         </div>
 
-        {/* Cost rows — no emoji, left-border accent */}
+        {/* Cost rows */}
         <div className="space-y-2 mb-4">
-          <CostRow label="Food & Drinks"  amount={result.breakdown.food}       total={total} accentColor="#F59E0B" />
-          <CostRow label="Transport"      amount={result.breakdown.transport}   total={total} accentColor="#006AC3" />
-          <CostRow label="Activities"     amount={result.breakdown.activities}  total={total} accentColor="#7C3AED" />
+          <CostRow label="Food & Drinks"  amount={adjFood}       total={adjTotal} accentColor="#F59E0B" valueColor={valueColor} />
+          <CostRow label="Transport"      amount={adjTransport}  total={adjTotal} accentColor="#006AC3" valueColor={valueColor} />
+          <CostRow label="Activities"     amount={adjActivities} total={adjTotal} accentColor="#7C3AED" valueColor={valueColor} />
         </div>
 
         {/* Why this estimate */}
@@ -337,6 +372,64 @@ function ScanResultView({ result }: { result: ScanResult }) {
                 {trigger}
               </span>
             ))}
+          </div>
+        )}
+      </div>
+
+      {/* ── Temptation Slider ── */}
+      <div className="nomi-card p-5">
+        <div className="flex items-center justify-between mb-3">
+          <div className="text-sm font-bold" style={{ color: '#0F1923' }}>Temptation Slider</div>
+          {diff !== 0 && (
+            <span
+              className="text-xs font-bold font-mono px-2 py-0.5 rounded-full"
+              style={{
+                background: diff < 0 ? '#E6F9F0' : '#FEE2E2',
+                color: diff < 0 ? '#059669' : '#DC2626',
+                border: `1px solid ${diff < 0 ? '#A7E8CB' : '#FECACA'}`,
+                transition: 'all 0.3s ease',
+              }}>
+              {diff < 0 ? `Save $${-diff}` : `+$${diff} extra`}
+            </span>
+          )}
+        </div>
+
+        <input
+          type="range"
+          min="0"
+          max="100"
+          value={hydeLevel}
+          onChange={(e) => setHydeLevel(Number(e.target.value))}
+          className="w-full h-2 rounded-full appearance-none cursor-pointer mb-2"
+          style={{
+            background: 'linear-gradient(to right, #059669 0%, #EEF3F8 50%, #DC2626 100%)',
+          }}
+        />
+
+        <div className="flex justify-between text-xs font-semibold mb-3">
+          <span style={{ color: '#059669' }}>Listen to Jekyll</span>
+          <span style={{ color: '#DC2626' }}>Give in to Hyde</span>
+        </div>
+
+        {diff < 0 && (
+          <div
+            className="rounded-lg px-3 py-2 text-xs font-semibold slide-up"
+            style={{ background: '#E6F9F0', color: '#059669', border: '1px solid #A7E8CB' }}>
+            Jekyll saves you ${-diff} — well done for listening!
+          </div>
+        )}
+        {diff > 0 && (
+          <div
+            className="rounded-lg px-3 py-2 text-xs font-semibold slide-up"
+            style={{ background: '#FEE2E2', color: '#DC2626', border: '1px solid #FECACA' }}>
+            Hyde costs you ${diff} extra. Is it really worth it?
+          </div>
+        )}
+        {diff === 0 && (
+          <div
+            className="rounded-lg px-3 py-2 text-xs font-semibold"
+            style={{ background: '#F0F4F8', color: '#5A6880', border: '1px solid #DDE5EE' }}>
+            Balanced — Jekyll and Hyde are in equilibrium.
           </div>
         )}
       </div>
@@ -383,6 +476,19 @@ function ScanResultView({ result }: { result: ScanResult }) {
           </p>
         </div>
       </div>
+
+      {/* Add to Calendar CTA */}
+      {onAddToCalendar && (
+        <button
+          onClick={onAddToCalendar}
+          className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl font-bold text-sm text-white transition-all slide-up"
+          style={{ background: 'linear-gradient(135deg, #006AC3, #004A8B)' }}
+          onMouseEnter={(e) => (e.currentTarget.style.opacity = '0.92')}
+          onMouseLeave={(e) => (e.currentTarget.style.opacity = '1')}>
+          <CalendarPlus size={16} />
+          Add to My Calendar
+        </button>
+      )}
     </div>
   );
 }

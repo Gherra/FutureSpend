@@ -1,26 +1,69 @@
 import { useState } from 'react';
-import { X, Plus } from 'lucide-react';
+import { X, Plus, AlertTriangle } from 'lucide-react';
 import type { CalendarEvent, Category } from '../types';
 
 const CATEGORIES: Category[] = ['Work', 'Personal', 'Family', 'Social', 'Health'];
+
+function t2m(t: string): number { const [h, m] = t.split(':').map(Number); return h * 60 + m; }
+
+function formatGapText(gapMins: number): string {
+  const abs = Math.abs(gapMins);
+  const dir = gapMins > 0 ? 'after' : 'before';
+  const h = Math.floor(abs / 60);
+  const m = abs % 60;
+  const s = h === 0 ? `${m} minute${m !== 1 ? 's' : ''}` : m === 0 ? `${h} hour${h !== 1 ? 's' : ''}` : `${h}h ${m}m`;
+  return `${s} ${dir}`;
+}
+
+interface Prefill { title: string; category: Category; socialPressure: number; }
 
 interface Props {
   onAdd: (event: CalendarEvent) => void;
   onClose: () => void;
   editEvent?: CalendarEvent | null;
+  prefill?: Prefill;
+  existingEvents?: CalendarEvent[];
 }
 
-export default function AddEventModal({ onAdd, onClose, editEvent }: Props) {
-  const [title, setTitle] = useState(editEvent?.title ?? '');
+export default function AddEventModal({ onAdd, onClose, editEvent, prefill, existingEvents }: Props) {
+  const [title, setTitle] = useState(editEvent?.title ?? prefill?.title ?? '');
   const [date, setDate] = useState(editEvent?.date ?? new Date().toISOString().split('T')[0]);
-  const [category, setCategory] = useState<Category>(editEvent?.category ?? 'Personal');
-  const [pressure, setPressure] = useState(editEvent?.socialPressure ?? 40);
+  const [time, setTime] = useState(editEvent?.time ?? '12:00');
+  const [category, setCategory] = useState<Category>(editEvent?.category ?? prefill?.category ?? 'Personal');
+  const [pressure, setPressure] = useState(editEvent?.socialPressure ?? prefill?.socialPressure ?? 40);
+  const [warning, setWarning] = useState<{ event: CalendarEvent; gapMins: number } | null>(null);
+
+  const doAdd = () => {
+    onAdd({
+      id: editEvent?.id ?? `ev-${Date.now()}`,
+      title: title.trim(),
+      date,
+      time: time || undefined,
+      category,
+      socialPressure: pressure,
+    });
+    onClose();
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) return;
-    onAdd({ id: editEvent?.id ?? `ev-${Date.now()}`, title: title.trim(), date, category, socialPressure: pressure });
-    onClose();
+
+    // 3-hour proximity warning (only if time set, no exact-match — exact handled by EventBoard)
+    if (existingEvents && time && !warning) {
+      const newMins = t2m(time);
+      const conflict = existingEvents.find((ev) => {
+        if (ev.id === editEvent?.id) return false;
+        if (ev.date !== date || !ev.time || ev.time === time) return false;
+        return Math.abs(t2m(ev.time) - newMins) <= 180;
+      });
+      if (conflict) {
+        setWarning({ event: conflict, gapMins: newMins - t2m(conflict.time!) });
+        return;
+      }
+    }
+
+    doAdd();
   };
 
   const pressureLabel = pressure < 30 ? 'Low' : pressure < 60 ? 'Moderate' : pressure < 80 ? 'High' : 'Extreme';
@@ -67,33 +110,75 @@ export default function AddEventModal({ onAdd, onClose, editEvent }: Props) {
               onChange={(e) => setTitle(e.target.value)}
               placeholder="e.g. Study group at coffee shop"
               className="w-full px-3 py-2.5 rounded-xl text-sm outline-none transition-all"
-              style={{
-                background: '#F8FAFC',
-                border: '1.5px solid #DDE5EE',
-                color: '#0F1923',
-              }}
+              style={{ background: '#F8FAFC', border: '1.5px solid #DDE5EE', color: '#0F1923' }}
               onFocus={(e) => (e.target.style.borderColor = '#006AC3')}
               onBlur={(e) => (e.target.style.borderColor = '#DDE5EE')}
               required autoFocus
             />
           </div>
 
-          {/* Date */}
-          <div>
-            <label className="block text-xs font-semibold mb-1.5" style={{ color: '#5A6880' }}>Date</label>
-            <input
-              type="date"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-              className="w-full px-3 py-2.5 rounded-xl text-sm outline-none"
-              style={{
-                background: '#F8FAFC',
-                border: '1.5px solid #DDE5EE',
-                color: '#0F1923',
-                colorScheme: 'light',
-              }}
-            />
+          {/* Date + Time */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold mb-1.5" style={{ color: '#5A6880' }}>Date</label>
+              <input
+                type="date"
+                value={date}
+                onChange={(e) => { setDate(e.target.value); setWarning(null); }}
+                className="w-full px-3 py-2.5 rounded-xl text-sm outline-none"
+                style={{ background: '#F8FAFC', border: '1.5px solid #DDE5EE', color: '#0F1923', colorScheme: 'light' }}
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold mb-1.5" style={{ color: '#5A6880' }}>Time</label>
+              <input
+                type="time"
+                value={time}
+                onChange={(e) => { setTime(e.target.value); setWarning(null); }}
+                className="w-full px-3 py-2.5 rounded-xl text-sm outline-none"
+                style={{ background: '#F8FAFC', border: '1.5px solid #DDE5EE', color: '#0F1923', colorScheme: 'light' }}
+                onFocus={(e) => (e.target.style.borderColor = '#006AC3')}
+                onBlur={(e) => (e.target.style.borderColor = '#DDE5EE')}
+              />
+            </div>
           </div>
+
+          {/* 3-hour proximity warning */}
+          {warning && (
+            <div
+              className="rounded-xl p-3.5 slide-up"
+              style={{ background: '#FFFBEB', border: '1px solid #FDE68A' }}>
+              <div className="flex items-start gap-2 mb-2.5">
+                <AlertTriangle size={14} style={{ color: '#D97706', flexShrink: 0, marginTop: 1 }} />
+                <div>
+                  <p className="text-xs font-bold mb-0.5" style={{ color: '#92400E' }}>
+                    ⚠️ High-Risk Transition
+                  </p>
+                  <p className="text-xs leading-relaxed" style={{ color: '#92400E' }}>
+                    This is <span className="font-semibold">{formatGapText(warning.gapMins)}</span>{' '}
+                    <span className="font-semibold">"{warning.event.title}"</span>. Back-to-back events
+                    typically add $15–25 in convenience spending (transit, snacks, impulse buys).
+                  </p>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={doAdd}
+                  className="flex-1 py-2 rounded-lg text-xs font-semibold text-white"
+                  style={{ background: '#006AC3' }}>
+                  Add Anyway
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setWarning(null)}
+                  className="flex-1 py-2 rounded-lg text-xs font-semibold"
+                  style={{ background: '#F0F4F8', color: '#5A6880', border: '1px solid #DDE5EE' }}>
+                  Change Time
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Category */}
           <div>
@@ -134,15 +219,17 @@ export default function AddEventModal({ onAdd, onClose, editEvent }: Props) {
           </div>
 
           {/* Submit */}
-          <button
-            type="submit"
-            className="w-full flex items-center justify-center gap-2 py-3 rounded-xl font-bold text-sm text-white transition-all"
-            style={{ background: '#006AC3' }}
-            onMouseEnter={(e) => (e.currentTarget.style.background = '#004A8B')}
-            onMouseLeave={(e) => (e.currentTarget.style.background = '#006AC3')}>
-            <Plus size={15} />
-            {editEvent ? 'Update Event' : 'Add to Calendar'}
-          </button>
+          {!warning && (
+            <button
+              type="submit"
+              className="w-full flex items-center justify-center gap-2 py-3 rounded-xl font-bold text-sm text-white transition-all"
+              style={{ background: '#006AC3' }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = '#004A8B')}
+              onMouseLeave={(e) => (e.currentTarget.style.background = '#006AC3')}>
+              <Plus size={15} />
+              {editEvent ? 'Update Event' : 'Add to Calendar'}
+            </button>
+          )}
         </form>
       </div>
     </div>

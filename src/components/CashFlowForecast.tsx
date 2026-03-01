@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import type { CalendarEvent } from '../types';
 import { predictCost } from '../utils/predictions';
 
@@ -45,10 +45,16 @@ function barColor(amount: number, max: number) {
 
 interface Props {
   events: CalendarEvent[];
+  resetKey: number;
 }
 
-export default function CashFlowForecast({ events }: Props) {
+export default function CashFlowForecast({ events, resetKey }: Props) {
   const [selectedDayIdx, setSelectedDayIdx] = useState<number | null>(null);
+  const [hoveredDayIdx, setHoveredDayIdx] = useState<number | null>(null);
+
+  useEffect(() => {
+    setSelectedDayIdx(null);
+  }, [resetKey]);
 
   const days      = buildDays(events);
   const maxAmount = Math.max(...days.map((d) => d.amount), 40);
@@ -90,9 +96,16 @@ export default function CashFlowForecast({ events }: Props) {
       <div className="overflow-x-auto">
         <svg
           width={SVG_W}
-          height={CHART_H + 46}
-          viewBox={`0 0 ${SVG_W} ${CHART_H + 46}`}
+          height={CHART_H + 46 + 16}
+          viewBox={`0 -16 ${SVG_W} ${CHART_H + 46 + 16}`}
           style={{ display: 'block', minWidth: '100%' }}>
+
+          {/* Drop-shadow filter for hover */}
+          <defs>
+            <filter id="bar-lift-shadow" x="-30%" y="-30%" width="160%" height="160%">
+              <feDropShadow dx="0" dy="3" stdDeviation="3" floodOpacity="0.14" />
+            </filter>
+          </defs>
 
           {/* Gridlines */}
           {[0.25, 0.5, 0.75, 1].map((t) => {
@@ -116,13 +129,20 @@ export default function CashFlowForecast({ events }: Props) {
             const barY   = CHART_H - barH;
             const color  = barColor(day.amount, maxAmount);
             const cx     = x + BAR_W / 2;
-            const isActive = selectedDayIdx === i;
+            const isActive  = selectedDayIdx === i;
+            const isHovered = hoveredDayIdx === i;
 
             return (
               <g
                 key={i}
                 onClick={() => handleBarClick(i)}
-                style={{ cursor: 'pointer' }}>
+                onMouseEnter={() => setHoveredDayIdx(i)}
+                onMouseLeave={() => setHoveredDayIdx(null)}
+                style={{
+                  cursor: 'pointer',
+                  transform: isHovered ? 'translateY(-4px)' : 'translateY(0)',
+                  transition: 'transform 0.18s ease',
+                }}>
 
                 {/* Active ring */}
                 {isActive && (
@@ -153,6 +173,7 @@ export default function CashFlowForecast({ events }: Props) {
                   <rect
                     x={x} y={barY} width={BAR_W} height={barH}
                     rx={6} fill={color}
+                    filter={isHovered ? 'url(#bar-lift-shadow)' : undefined}
                     style={{ opacity: isActive ? 1 : day.isToday ? 0.9 : 0.72 }}
                   />
                 )}
@@ -164,8 +185,8 @@ export default function CashFlowForecast({ events }: Props) {
                     textAnchor="middle"
                     fontSize="9"
                     fontFamily="'Inter', monospace"
-                    fontWeight="700"
-                    fill={isActive ? color : `${color}CC`}>
+                    fontWeight={isActive || isHovered ? '800' : '700'}
+                    fill={isActive || isHovered ? color : `${color}CC`}>
                     ${day.amount}
                   </text>
                 )}

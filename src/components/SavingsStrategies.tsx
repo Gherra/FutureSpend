@@ -60,11 +60,19 @@ function generateActions(events: CalendarEvent[]): SavingsAction[] {
     .slice(0, 5);
 }
 
-interface Props { events: CalendarEvent[]; }
+interface Props {
+  events: CalendarEvent[];
+  actioned: Set<string>;
+  onNomiAction: (id: string, saving: number) => void;
+  resetKey: number;
+}
 
-export default function SavingsStrategies({ events }: Props) {
+export default function SavingsStrategies({ events, actioned, onNomiAction, resetKey }: Props) {
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
-  const [actioned,  setActioned]  = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    setDismissed(new Set());
+  }, [resetKey]);
   const [nomiToast, setNomiToast] = useState<string | null>(null);
 
   useEffect(() => {
@@ -87,7 +95,7 @@ export default function SavingsStrategies({ events }: Props) {
   const totalSavings = actions.reduce((sum, a) => sum + a.potentialSaving, 0);
 
   const handleNomiSave = (action: SavingsAction) => {
-    setActioned(new Set([...actioned, action.id]));
+    onNomiAction(action.id, action.potentialSaving);
     setNomiToast(`$${action.potentialSaving} moved to your NOMI Find & Save account`);
   };
 

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Trophy, Swords, Users } from 'lucide-react';
 import type { Friend, Challenge } from '../types';
 import { MOCK_CHALLENGES } from '../data/mockData';
@@ -6,12 +6,19 @@ import { MOCK_CHALLENGES } from '../data/mockData';
 interface Props {
   friends: Friend[];
   totalSpend: number;
+  resetKey: number;
 }
 
-export default function Leaderboard({ friends, totalSpend }: Props) {
+export default function Leaderboard({ friends, totalSpend, resetKey }: Props) {
   const [joinedChallenges, setJoinedChallenges] = useState<Set<string>>(new Set());
   const [joinedCommunity, setJoinedCommunity] = useState(false);
   const [communityCount, setCommunityCount] = useState(12);
+
+  useEffect(() => {
+    setJoinedChallenges(new Set());
+    setJoinedCommunity(false);
+    setCommunityCount(12);
+  }, [resetKey]);
 
   const sorted = friends
     .map((f) => (f.name === 'You' ? { ...f, weeklySpend: totalSpend } : f))

@@ -4,6 +4,7 @@ export interface CalendarEvent {
   id: string;
   title: string;
   date: string; // ISO date string
+  time?: string; // "HH:MM" 24-hour, optional
   category: Category;
   socialPressure: number; // 0-100
 }

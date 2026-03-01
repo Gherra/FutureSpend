@@ -51,8 +51,9 @@ export default function App() {
   const [streak, setStreak] = useLocalStorage<number>('futurespend-streak', 4);
   const [weeklyBudget, setWeeklyBudget] = useLocalStorage<number>('futurespend-budget', WEEKLY_BUDGET_DEFAULT);
   const [damageControlActed, setDamageControlActed] = useLocalStorage<number>('futurespend-damage-acted', 0);
+  const [nomiActioned, setNomiActioned] = useState<Set<string>>(new Set());
   const [toast, setToast] = useState<string | null>(null);
-  // resetKey forces NomiInsights / SavingsStrategies / Leaderboard to remount on full reset
+  // resetKey forces NomiInsights / SavingsStrategies / Leaderboard / EventBoard to remount on full reset
   const [resetKey, setResetKey] = useState(0);
 
   const totalSpend = useMemo(() => {
@@ -77,7 +78,9 @@ export default function App() {
   const handleResetDemo = () => {
     setEvents(SEED_EVENTS);
     setWeeklyBudget(WEEKLY_BUDGET_DEFAULT);
+    setStreak(4);
     setDamageControlActed(0);
+    setNomiActioned(new Set());
     setResetKey((k) => k + 1);
     showToast('Demo events restored — ready to present!');
   };
@@ -116,13 +119,20 @@ export default function App() {
         {page === 'dashboard' ? (
           <>
             {/* Row 1: NOMI Insights */}
-            <NomiInsights key={resetKey} events={events} />
+            <NomiInsights
+              resetKey={resetKey}
+              events={events}
+              onEditEvent={handleEditEvent}
+              onDeleteEvent={handleDeleteEvent}
+              onShowToast={showToast}
+            />
 
             {/* Row 2: Event Board | Sidebar */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 items-start">
               <div className="lg:col-span-2 space-y-5">
                 <div className="lg:hidden">{hydeOMeter}</div>
                 <EventBoard
+                  resetKey={resetKey}
                   events={events}
                   onAdd={handleAddEvent}
                   onEdit={handleEditEvent}
@@ -139,16 +149,21 @@ export default function App() {
                   totalSpend={totalSpend}
                   weeklyBudget={weeklyBudget}
                 />
-                <CashFlowForecast events={events} />
-                <SavingsStrategies key={resetKey} events={events} />
-                <Leaderboard key={resetKey} friends={MOCK_FRIENDS} totalSpend={totalSpend} />
+                <CashFlowForecast resetKey={resetKey} events={events} />
+                <SavingsStrategies
+                  resetKey={resetKey}
+                  events={events}
+                  actioned={nomiActioned}
+                  onNomiAction={(id) => setNomiActioned((prev) => new Set([...prev, id]))}
+                />
+                <Leaderboard resetKey={resetKey} friends={MOCK_FRIENDS} totalSpend={totalSpend} />
               </div>
             </div>
           </>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 items-start max-w-5xl mx-auto">
             <div className="lg:col-span-2">
-              <Scanner />
+              <Scanner onAddEvent={handleAddEvent} existingEvents={events} />
             </div>
             <div className="space-y-4">
               {hydeOMeter}

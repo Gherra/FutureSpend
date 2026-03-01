@@ -18,14 +18,55 @@ interface Props {
   onAdd: (event: CalendarEvent) => void;
   onEdit: (event: CalendarEvent) => void;
   onDelete: (id: string) => void;
+  resetKey: number;
 }
 
-export default function EventBoard({ events, onAdd, onEdit, onDelete }: Props) {
+interface ConflictState {
+  newEvent: CalendarEvent;
+  existingEvent: CalendarEvent;
+}
+
+function EventConflictCard({ event, label, highlighted }: { event: CalendarEvent; label: string; highlighted?: boolean }) {
+  const bd = predictCost(event.title, event.category, event.socialPressure);
+  const dateStr = new Date(event.date + 'T00:00:00').toLocaleDateString('en-CA', { month: 'short', day: 'numeric' });
+  return (
+    <div
+      className="rounded-xl p-3 flex flex-col gap-1.5"
+      style={{
+        background: highlighted ? '#EFF6FF' : '#F8FAFC',
+        border: `1.5px solid ${highlighted ? '#006AC3' : '#E5EDF5'}`,
+      }}>
+      <div className="text-xs font-bold" style={{ color: highlighted ? '#006AC3' : '#8FA3B8' }}>{label}</div>
+      <span className={`text-xs px-1.5 py-0.5 rounded-md border cat-${event.category} self-start`}>
+        {event.category}
+      </span>
+      <p className="text-xs font-semibold leading-snug" style={{ color: '#0F1923' }}>{event.title}</p>
+      <div className="text-xs" style={{ color: '#8FA3B8' }}>
+        {dateStr}{event.time ? ` · ${event.time}` : ''}
+      </div>
+      <div className="text-lg font-black font-mono mt-1" style={{ color: highlighted ? '#006AC3' : '#5A6880' }}>
+        ${bd.total}
+        <span className="text-xs font-normal ml-1" style={{ color: '#8FA3B8' }}>predicted</span>
+      </div>
+    </div>
+  );
+}
+
+export default function EventBoard({ events, onAdd, onEdit, onDelete, resetKey }: Props) {
   const [activeTab, setActiveTab] = useState<Category | 'All'>('All');
   const [showModal, setShowModal] = useState(false);
   const [editingEvent, setEditingEvent] = useState<CalendarEvent | null>(null);
   const [showSyncModal, setShowSyncModal] = useState(false);
   const [syncStep, setSyncStep] = useState(0);
+  const [conflictState, setConflictState] = useState<ConflictState | null>(null);
+
+  useEffect(() => {
+    setActiveTab('All');
+    setShowModal(false);
+    setEditingEvent(null);
+    setShowSyncModal(false);
+    setConflictState(null);
+  }, [resetKey]);
 
   // Advance sync steps: 0=idle → 1 → 2 → 3 → 4=done → auto-close
   useEffect(() => {
@@ -59,7 +100,28 @@ export default function EventBoard({ events, onAdd, onEdit, onDelete }: Props) {
 
   const handleEdit = (event: CalendarEvent) => { setEditingEvent(event); setShowModal(true); };
   const handleModalClose = () => { setShowModal(false); setEditingEvent(null); };
-  const handleAdd = (event: CalendarEvent) => { editingEvent ? onEdit(event) : onAdd(event); };
+
+  const handleAdd = (event: CalendarEvent) => {
+    if (editingEvent) { onEdit(event); return; }
+    // Conflict detection: same date + same time (only if time is specified)
+    if (event.time) {
+      const conflict = events.find(
+        (e) => e.date === event.date && e.time === event.time
+      );
+      if (conflict) {
+        setConflictState({ newEvent: event, existingEvent: conflict });
+        return; // don't close modal yet — conflict modal takes over
+      }
+    }
+    onAdd(event);
+  };
+
+  const handleConflictSwitch = () => {
+    if (!conflictState) return;
+    onDelete(conflictState.existingEvent.id);
+    onAdd(conflictState.newEvent);
+    setConflictState(null);
+  };
 
   const counts = CATEGORIES.reduce<Record<string, number>>((acc, cat) => {
     acc[cat] = upcoming.filter((e) => e.category === cat).length;
@@ -145,7 +207,72 @@ export default function EventBoard({ events, onAdd, onEdit, onDelete }: Props) {
       </div>
 
       {showModal && (
-        <AddEventModal onAdd={handleAdd} onClose={handleModalClose} editEvent={editingEvent} />
+        <AddEventModal
+          onAdd={handleAdd}
+          onClose={handleModalClose}
+          editEvent={editingEvent}
+          existingEvents={events}
+        />
+      )}
+
+      {/* ── Time Conflict Modal ── */}
+      {conflictState && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ background: 'rgba(15,25,35,0.6)', backdropFilter: 'blur(8px)' }}>
+          <div
+            className="w-full max-w-lg rounded-2xl p-6 slide-up"
+            style={{
+              background: '#FFFFFF',
+              border: '1px solid #DDE5EE',
+              boxShadow: '0 24px 60px rgba(0,40,80,0.18)',
+            }}>
+            {/* Header */}
+            <div className="mb-4">
+              <div className="flex items-center gap-2 mb-1">
+                <div
+                  className="w-6 h-6 rounded-lg flex items-center justify-center text-sm"
+                  style={{ background: '#FEE2E2' }}>
+                  ⚠️
+                </div>
+                <h2 className="text-base font-bold" style={{ color: '#0F1923' }}>Time Conflict</h2>
+              </div>
+              <p className="text-xs leading-relaxed" style={{ color: '#5A6880' }}>
+                You already have{' '}
+                <span className="font-semibold" style={{ color: '#0F1923' }}>
+                  {conflictState.existingEvent.title}
+                </span>{' '}
+                at this time. You can only attend one — which do you prefer?
+              </p>
+            </div>
+
+            {/* Two event cards */}
+            <div className="grid grid-cols-2 gap-3 mb-5">
+              <EventConflictCard event={conflictState.existingEvent} label="Current Plan" />
+              <EventConflictCard event={conflictState.newEvent} label="New Event" highlighted />
+            </div>
+
+            {/* Action buttons */}
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                onClick={() => setConflictState(null)}
+                className="py-2.5 px-3 rounded-xl font-semibold text-xs transition-all"
+                style={{ background: '#F0F4F8', color: '#5A6880', border: '1px solid #DDE5EE' }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = '#E5EDF5')}
+                onMouseLeave={(e) => (e.currentTarget.style.background = '#F0F4F8')}>
+                Keep Current Event
+              </button>
+              <button
+                onClick={handleConflictSwitch}
+                className="py-2.5 px-3 rounded-xl font-semibold text-xs text-white transition-all"
+                style={{ background: '#006AC3' }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = '#004A8B')}
+                onMouseLeave={(e) => (e.currentTarget.style.background = '#006AC3')}>
+                Switch to New Event
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* ── Calendar Sync Modal ── */}

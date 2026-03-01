@@ -233,12 +233,10 @@ export default function NomiInsights({ events, resetKey, onEditEvent, onDeleteEv
                 <div className="flex items-center gap-2">
                   <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: '#D97706' }} />
                   <span className="text-xs font-semibold flex-1 truncate" style={{ color: '#0F1923' }}>{stacked.ev1.title}</span>
-                  {stacked.ev1.time && <span className="text-xs flex-shrink-0" style={{ color: '#8FA3B8' }}>{(() => { const [h, m] = stacked.ev1.time!.split(':').map(Number); return `${h % 12 || 12}:${m.toString().padStart(2,'0')} ${h >= 12 ? 'PM' : 'AM'}`; })()}</span>}
                 </div>
                 <div className="flex items-center gap-2">
                   <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: '#D97706', opacity: 0.45 }} />
                   <span className="text-xs font-semibold flex-1 truncate" style={{ color: '#0F1923' }}>{stacked.ev2.title}</span>
-                  {stacked.ev2.time && <span className="text-xs flex-shrink-0" style={{ color: '#8FA3B8' }}>{(() => { const [h, m] = stacked.ev2.time!.split(':').map(Number); return `${h % 12 || 12}:${m.toString().padStart(2,'0')} ${h >= 12 ? 'PM' : 'AM'}`; })()}</span>}
                   <div className="flex gap-1 flex-shrink-0">
                     <button
                       onClick={() => setRescheduleEvent(stacked.ev2)}

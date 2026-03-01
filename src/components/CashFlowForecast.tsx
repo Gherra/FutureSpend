@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import type { CalendarEvent } from '../types';
 import { predictCost } from '../utils/predictions';
 
@@ -6,7 +7,7 @@ interface DaySpend {
   sublabel: string;
   amount: number;
   isToday: boolean;
-  events: string[];
+  calEvents: CalendarEvent[];
 }
 
 function buildDays(events: CalendarEvent[]): DaySpend[] {
@@ -19,8 +20,8 @@ function buildDays(events: CalendarEvent[]): DaySpend[] {
     d.setDate(d.getDate() + i);
     const dateStr = d.toISOString().split('T')[0];
 
-    const dayEvents = events.filter((e) => e.date === dateStr);
-    const amount = dayEvents.reduce(
+    const calEvents = events.filter((e) => e.date === dateStr);
+    const amount = calEvents.reduce(
       (sum, e) => sum + predictCost(e.title, e.category, e.socialPressure).total, 0
     );
 
@@ -29,7 +30,7 @@ function buildDays(events: CalendarEvent[]): DaySpend[] {
       sublabel: d.toLocaleDateString('en-CA', { month: 'short', day: 'numeric' }),
       amount,
       isToday: i === 0,
-      events: dayEvents.map((e) => e.title),
+      calEvents,
     };
   });
 }
@@ -47,14 +48,29 @@ interface Props {
 }
 
 export default function CashFlowForecast({ events }: Props) {
-  const days = buildDays(events);
+  const [selectedDayIdx, setSelectedDayIdx] = useState<number | null>(null);
+
+  const days      = buildDays(events);
   const maxAmount = Math.max(...days.map((d) => d.amount), 40);
   const totalWeek = days.reduce((s, d) => s + d.amount, 0);
 
-  const CHART_H = 90; // px height of bar area
-  const BAR_W = 28;   // px bar width
-  const GAP = 10;     // px gap between bars
-  const SVG_W = days.length * (BAR_W + GAP) - GAP;
+  const CHART_H = 90;
+  const BAR_W   = 28;
+  const GAP     = 10;
+  const SVG_W   = days.length * (BAR_W + GAP) - GAP;
+
+  // Jekyll Path: 60% of each bar (40% reduction)
+  const jekyllPathPts = days
+    .map((day, i) => {
+      if (day.amount === 0) return null;
+      const x = i * (BAR_W + GAP) + BAR_W / 2;
+      const jekyllH = Math.max(Math.round((day.amount * 0.6 / maxAmount) * CHART_H), 2);
+      return `${x},${CHART_H - jekyllH}`;
+    })
+    .filter(Boolean) as string[];
+
+  const handleBarClick = (i: number) =>
+    setSelectedDayIdx(selectedDayIdx === i ? null : i);
 
   return (
     <div className="nomi-card p-4">
@@ -91,25 +107,40 @@ export default function CashFlowForecast({ events }: Props) {
             );
           })}
 
+          {/* Bars */}
           {days.map((day, i) => {
-            const x = i * (BAR_W + GAP);
-            const barH = day.amount > 0
+            const x      = i * (BAR_W + GAP);
+            const barH   = day.amount > 0
               ? Math.max(Math.round((day.amount / maxAmount) * CHART_H), 4)
               : 0;
-            const barY = CHART_H - barH;
-            const color = barColor(day.amount, maxAmount);
-            const cx = x + BAR_W / 2;
+            const barY   = CHART_H - barH;
+            const color  = barColor(day.amount, maxAmount);
+            const cx     = x + BAR_W / 2;
+            const isActive = selectedDayIdx === i;
 
             return (
-              <g key={i}>
+              <g
+                key={i}
+                onClick={() => handleBarClick(i)}
+                style={{ cursor: 'pointer' }}>
+
+                {/* Active ring */}
+                {isActive && (
+                  <rect
+                    x={x - 3} y={-3} width={BAR_W + 6} height={CHART_H + 6}
+                    rx={9} fill="none"
+                    stroke={color} strokeWidth="2" opacity="0.45"
+                  />
+                )}
+
                 {/* Bar background track */}
                 <rect
                   x={x} y={0} width={BAR_W} height={CHART_H}
-                  rx={6} fill="#F5F7FA"
+                  rx={6} fill={isActive ? `${color}14` : '#F5F7FA'}
                 />
 
                 {/* Today highlight */}
-                {day.isToday && (
+                {day.isToday && !isActive && (
                   <rect
                     x={x - 3} y={0} width={BAR_W + 6} height={CHART_H}
                     rx={8} fill={`${color}10`}
@@ -122,7 +153,7 @@ export default function CashFlowForecast({ events }: Props) {
                   <rect
                     x={x} y={barY} width={BAR_W} height={barH}
                     rx={6} fill={color}
-                    style={{ opacity: day.isToday ? 1 : 0.75 }}
+                    style={{ opacity: isActive ? 1 : day.isToday ? 0.9 : 0.72 }}
                   />
                 )}
 
@@ -134,7 +165,7 @@ export default function CashFlowForecast({ events }: Props) {
                     fontSize="9"
                     fontFamily="'Inter', monospace"
                     fontWeight="700"
-                    fill={color}>
+                    fill={isActive ? color : `${color}CC`}>
                     ${day.amount}
                   </text>
                 )}
@@ -145,8 +176,8 @@ export default function CashFlowForecast({ events }: Props) {
                   textAnchor="middle"
                   fontSize="10"
                   fontFamily="'Inter', sans-serif"
-                  fontWeight={day.isToday ? '700' : '500'}
-                  fill={day.isToday ? '#006AC3' : '#5A6880'}>
+                  fontWeight={day.isToday || isActive ? '700' : '500'}
+                  fill={isActive ? color : day.isToday ? '#006AC3' : '#5A6880'}>
                   {day.label}
                 </text>
 
@@ -156,33 +187,138 @@ export default function CashFlowForecast({ events }: Props) {
                   textAnchor="middle"
                   fontSize="8.5"
                   fontFamily="'Inter', sans-serif"
-                  fill="#8FA3B8">
+                  fill={isActive ? color : '#8FA3B8'}>
                   {day.sublabel}
                 </text>
 
                 {/* Event dot indicator */}
-                {day.events.length > 0 && (
-                  <circle cx={cx} cy={CHART_H + 37} r="2.5" fill={color} opacity="0.7" />
+                {day.calEvents.length > 0 && (
+                  <circle cx={cx} cy={CHART_H + 37} r="2.5" fill={color} opacity={isActive ? 1 : 0.7} />
                 )}
               </g>
             );
           })}
+
+          {/* ── Jekyll Path dotted line ── */}
+          {jekyllPathPts.length >= 2 && (
+            <>
+              <polyline
+                points={jekyllPathPts.join(' ')}
+                fill="none"
+                stroke="#059669"
+                strokeWidth="1.5"
+                strokeDasharray="4 3"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                opacity="0.75"
+              />
+              {/* Dots at each Jekyll Path point */}
+              {jekyllPathPts.map((pt, i) => {
+                const [px, py] = pt.split(',').map(Number);
+                return (
+                  <circle
+                    key={i}
+                    cx={px} cy={py} r="2.5"
+                    fill="white"
+                    stroke="#059669"
+                    strokeWidth="1.5"
+                    opacity="0.85"
+                  />
+                );
+              })}
+            </>
+          )}
         </svg>
       </div>
 
-      {/* Legend */}
-      <div className="flex items-center gap-4 mt-3 pt-3" style={{ borderTop: '1px solid #EEF3F8' }}>
-        {[
-          { color: '#006AC3', label: 'Low' },
-          { color: '#F59E0B', label: 'Moderate' },
-          { color: '#EA580C', label: 'High' },
-          { color: '#DC2626', label: 'Critical' },
-        ].map(({ color, label }) => (
-          <div key={label} className="flex items-center gap-1">
-            <div className="w-2 h-2 rounded-sm" style={{ background: color }} />
-            <span className="text-xs" style={{ color: '#8FA3B8' }}>{label}</span>
+      {/* ── Drill-down panel ── */}
+      {selectedDayIdx !== null && (() => {
+        const day = days[selectedDayIdx];
+        return (
+          <div
+            className="mt-3 pt-3 slide-up"
+            style={{ borderTop: '1px solid #EEF3F8' }}>
+            {/* Panel header */}
+            <div className="flex items-center justify-between mb-2.5">
+              <div className="flex items-center gap-2">
+                <div
+                  className="w-1 h-4 rounded-full"
+                  style={{ background: barColor(day.amount, maxAmount) }}
+                />
+                <span className="text-xs font-bold" style={{ color: '#0F1923' }}>
+                  {day.label}
+                  <span className="font-normal ml-1" style={{ color: '#8FA3B8' }}>· {day.sublabel}</span>
+                </span>
+              </div>
+              <span className="text-xs font-mono font-bold" style={{ color: barColor(day.amount, maxAmount) }}>
+                ${day.amount}
+              </span>
+            </div>
+
+            {day.calEvents.length === 0 ? (
+              <p className="text-xs py-2 text-center" style={{ color: '#8FA3B8' }}>
+                No events scheduled — free day on the Jekyll Path.
+              </p>
+            ) : (
+              <div className="space-y-1.5">
+                {day.calEvents.map((ev) => {
+                  const bd    = predictCost(ev.title, ev.category, ev.socialPressure);
+                  const color = barColor(bd.total, maxAmount);
+                  return (
+                    <div
+                      key={ev.id}
+                      className="flex items-center justify-between px-3 py-2 rounded-xl"
+                      style={{ background: '#F8FAFC', border: '1px solid #E5EDF5' }}>
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className={`text-xs px-1.5 py-0.5 rounded-md border cat-${ev.category} flex-shrink-0`}>
+                          {ev.category}
+                        </span>
+                        <span className="text-xs truncate" style={{ color: '#0F1923' }}>
+                          {ev.title}
+                        </span>
+                      </div>
+                      <span
+                        className="text-xs font-mono font-bold flex-shrink-0 ml-2"
+                        style={{ color }}>
+                        ${bd.total}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
-        ))}
+        );
+      })()}
+
+      {/* Legend */}
+      <div
+        className="flex items-center justify-between mt-3 pt-3"
+        style={{ borderTop: '1px solid #EEF3F8' }}>
+        <div className="flex items-center gap-3">
+          {[
+            { color: '#006AC3', label: 'Low' },
+            { color: '#F59E0B', label: 'Moderate' },
+            { color: '#EA580C', label: 'High' },
+            { color: '#DC2626', label: 'Critical' },
+          ].map(({ color, label }) => (
+            <div key={label} className="flex items-center gap-1">
+              <div className="w-2 h-2 rounded-sm" style={{ background: color }} />
+              <span className="text-xs" style={{ color: '#8FA3B8' }}>{label}</span>
+            </div>
+          ))}
+        </div>
+        {/* Jekyll Path legend */}
+        <div className="flex items-center gap-1.5">
+          <svg width="18" height="10" viewBox="0 0 18 10">
+            <line
+              x1="0" y1="5" x2="18" y2="5"
+              stroke="#059669" strokeWidth="1.5"
+              strokeDasharray="4 3" strokeLinecap="round"
+            />
+          </svg>
+          <span className="text-xs font-medium" style={{ color: '#059669' }}>Jekyll Path</span>
+        </div>
       </div>
     </div>
   );

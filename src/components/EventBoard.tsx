@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Plus, CalendarDays } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Plus, CalendarDays, RefreshCw, CheckCircle2 } from 'lucide-react';
 import type { CalendarEvent, Category } from '../types';
 import { predictCost } from '../utils/predictions';
 import EventCard from './EventCard';
@@ -7,6 +7,11 @@ import AddEventModal from './AddEventModal';
 
 const CATEGORIES: Category[] = ['Work', 'Personal', 'Family', 'Social', 'Health'];
 
+const SYNC_SOURCES = [
+  { name: 'Google Calendar', color: '#EA4335' },
+  { name: 'Outlook',         color: '#0078D4' },
+  { name: 'iCal',            color: '#888888' },
+];
 
 interface Props {
   events: CalendarEvent[];
@@ -19,6 +24,24 @@ export default function EventBoard({ events, onAdd, onEdit, onDelete }: Props) {
   const [activeTab, setActiveTab] = useState<Category | 'All'>('All');
   const [showModal, setShowModal] = useState(false);
   const [editingEvent, setEditingEvent] = useState<CalendarEvent | null>(null);
+  const [showSyncModal, setShowSyncModal] = useState(false);
+  const [syncStep, setSyncStep] = useState(0);
+
+  // Advance sync steps: 0=idle → 1 → 2 → 3 → 4=done → auto-close
+  useEffect(() => {
+    if (!showSyncModal) return;
+    setSyncStep(0);
+    const timers = [
+      setTimeout(() => setSyncStep(1), 600),
+      setTimeout(() => setSyncStep(2), 1200),
+      setTimeout(() => setSyncStep(3), 1800),
+      setTimeout(() => setSyncStep(4), 2400),
+      setTimeout(() => { setShowSyncModal(false); setSyncStep(0); }, 3500),
+    ];
+    return () => timers.forEach(clearTimeout);
+  }, [showSyncModal]);
+
+  const syncProgress = syncStep === 0 ? 2 : syncStep === 1 ? 33 : syncStep === 2 ? 66 : 100;
 
   const now = new Date();
   now.setHours(0, 0, 0, 0);
@@ -52,19 +75,26 @@ export default function EventBoard({ events, onAdd, onEdit, onDelete }: Props) {
           <h2 className="text-sm font-bold" style={{ color: '#0F1923' }}>Event Board</h2>
           <span className="text-xs" style={{ color: '#8FA3B8' }}>next 14 days</span>
         </div>
-        <button
-          onClick={() => setShowModal(true)}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"
-          style={{
-            background: '#E8F2FB',
-            border: '1px solid #B8D8F4',
-            color: '#006AC3',
-          }}
-          onMouseEnter={(e) => (e.currentTarget.style.background = '#D0E8F8')}
-          onMouseLeave={(e) => (e.currentTarget.style.background = '#E8F2FB')}>
-          <Plus size={13} />
-          Add Event
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowSyncModal(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"
+            style={{ background: '#F0F4F8', border: '1px solid #DDE5EE', color: '#5A6880' }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = '#E5EDF5'; e.currentTarget.style.color = '#006AC3'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = '#F0F4F8'; e.currentTarget.style.color = '#5A6880'; }}>
+            <RefreshCw size={11} />
+            Sync Calendars
+          </button>
+          <button
+            onClick={() => setShowModal(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"
+            style={{ background: '#E8F2FB', border: '1px solid #B8D8F4', color: '#006AC3' }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = '#D0E8F8')}
+            onMouseLeave={(e) => (e.currentTarget.style.background = '#E8F2FB')}>
+            <Plus size={13} />
+            Add Event
+          </button>
+        </div>
       </div>
 
       {/* Category tabs */}
@@ -116,6 +146,76 @@ export default function EventBoard({ events, onAdd, onEdit, onDelete }: Props) {
 
       {showModal && (
         <AddEventModal onAdd={handleAdd} onClose={handleModalClose} editEvent={editingEvent} />
+      )}
+
+      {/* ── Calendar Sync Modal ── */}
+      {showSyncModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center"
+          style={{ background: 'rgba(0,0,0,0.18)', backdropFilter: 'blur(4px)' }}
+          onClick={() => setShowSyncModal(false)}>
+          <div
+            className="bg-white rounded-2xl p-5 shadow-xl w-full mx-4 slide-up"
+            style={{ maxWidth: '300px' }}
+            onClick={(e) => e.stopPropagation()}>
+
+            {syncStep < 4 ? (
+              <>
+                <p className="font-bold text-sm mb-4" style={{ color: '#0F1923' }}>
+                  Syncing Calendars
+                </p>
+
+                {/* Source rows */}
+                <div className="space-y-3 mb-5">
+                  {SYNC_SOURCES.map((src, i) => (
+                    <div key={src.name} className="flex items-center justify-between">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: src.color }} />
+                        <span className="text-xs font-medium" style={{ color: '#0F1923' }}>{src.name}</span>
+                      </div>
+                      <div className="flex-shrink-0">
+                        {syncStep > i ? (
+                          <CheckCircle2 size={15} style={{ color: '#059669' }} />
+                        ) : syncStep === i ? (
+                          <div
+                            className="w-3.5 h-3.5 rounded-full border-2 animate-spin"
+                            style={{ borderColor: '#006AC3', borderTopColor: 'transparent' }}
+                          />
+                        ) : (
+                          <div className="w-3 h-3 rounded-full" style={{ background: '#EEF3F8' }} />
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Progress bar */}
+                <div className="h-1.5 rounded-full overflow-hidden mb-2" style={{ background: '#EEF3F8' }}>
+                  <div
+                    className="h-full rounded-full"
+                    style={{
+                      width: `${syncProgress}%`,
+                      background: '#006AC3',
+                      transition: 'width 0.5s ease',
+                    }}
+                  />
+                </div>
+                <p className="text-xs text-center" style={{ color: '#8FA3B8' }}>
+                  {syncStep === 0 ? 'Connecting to calendars…' : `Importing from ${SYNC_SOURCES[syncStep - 1]?.name}…`}
+                </p>
+              </>
+            ) : (
+              /* Success state */
+              <div className="text-center py-3 slide-up">
+                <CheckCircle2 size={30} className="mx-auto mb-3" style={{ color: '#059669' }} />
+                <p className="font-bold text-sm mb-1" style={{ color: '#0F1923' }}>Calendars Synced</p>
+                <p className="text-xs" style={{ color: '#5A6880' }}>
+                  Imported 7 events from 3 calendars
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
       )}
     </div>
   );

@@ -1,5 +1,5 @@
-import { Lightbulb, ArrowUpDown, Shield, Package, Clock, CheckCircle, X } from 'lucide-react';
-import { useState } from 'react';
+import { Lightbulb, ArrowUpDown, Shield, Package, Clock, CheckCircle, CheckCircle2, X } from 'lucide-react';
+import { useState, useEffect } from 'react';
 import type { CalendarEvent, SavingsAction } from '../types';
 import { predictCost } from '../utils/predictions';
 
@@ -64,6 +64,14 @@ interface Props { events: CalendarEvent[]; }
 
 export default function SavingsStrategies({ events }: Props) {
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
+  const [actioned,  setActioned]  = useState<Set<string>>(new Set());
+  const [nomiToast, setNomiToast] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!nomiToast) return;
+    const t = setTimeout(() => setNomiToast(null), 3000);
+    return () => clearTimeout(t);
+  }, [nomiToast]);
 
   const now = new Date();
   now.setHours(0, 0, 0, 0);
@@ -78,69 +86,125 @@ export default function SavingsStrategies({ events }: Props) {
   const actions = generateActions(upcoming).filter((a) => !dismissed.has(a.id));
   const totalSavings = actions.reduce((sum, a) => sum + a.potentialSaving, 0);
 
+  const handleNomiSave = (action: SavingsAction) => {
+    setActioned(new Set([...actioned, action.id]));
+    setNomiToast(`$${action.potentialSaving} moved to your NOMI Find & Save account`);
+  };
+
   return (
-    <div className="nomi-card p-4">
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
-          <Lightbulb size={14} style={{ color: '#006AC3' }} />
-          <span className="text-sm font-bold" style={{ color: '#0F1923' }}>Savings Strategies</span>
+    <>
+      <div className="nomi-card p-4">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <Lightbulb size={14} style={{ color: '#006AC3' }} />
+            <span className="text-sm font-bold" style={{ color: '#0F1923' }}>Savings Strategies</span>
+          </div>
+          {totalSavings > 0 && (
+            <span
+              className="text-xs font-bold px-2 py-0.5 rounded-full"
+              style={{ background: '#E6F9F0', color: '#059669', border: '1px solid #A7E8CB' }}>
+              Save up to ${totalSavings}
+            </span>
+          )}
         </div>
-        {totalSavings > 0 && (
-          <span
-            className="text-xs font-bold px-2 py-0.5 rounded-full"
-            style={{ background: '#E6F9F0', color: '#059669', border: '1px solid #A7E8CB' }}>
-            Save up to ${totalSavings}
-          </span>
+
+        {actions.length === 0 ? (
+          <div className="text-center py-5">
+            <p className="text-xs" style={{ color: '#8FA3B8' }}>
+              {events.length === 0
+                ? 'Add events above to get personalized savings strategies.'
+                : 'No high-spend events in the next 7 days to strategize around.'}
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {actions.map((action, i) => {
+              const Icon = TYPE_ICONS[action.type];
+              const color = TYPE_COLOR[action.type];
+              const isActioned = actioned.has(action.id);
+              return (
+                <div
+                  key={action.id}
+                  className="rounded-xl p-3 group relative slide-up"
+                  style={{
+                    animationDelay: `${i * 0.05}s`,
+                    background: isActioned ? '#F0FDF4' : '#F8FAFC',
+                    border: `1px solid ${isActioned ? '#A7E8CB' : '#E5EDF5'}`,
+                  }}>
+                  {/* Main row */}
+                  <div className="flex items-start gap-2.5 mb-2.5">
+                    <div
+                      className="w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5"
+                      style={{ background: `${color}15` }}>
+                      <Icon size={12} style={{ color }} />
+                    </div>
+                    <div className="flex-1 min-w-0 pr-5">
+                      <div className="text-xs truncate mb-0.5" style={{ color: '#8FA3B8' }}>{action.eventTitle}</div>
+                      <p className="text-xs leading-relaxed" style={{ color: '#0F1923' }}>{action.suggestion}</p>
+                    </div>
+                    <div className="flex-shrink-0 flex flex-col items-end gap-1">
+                      <span className="text-xs font-bold font-mono" style={{ color: '#059669' }}>
+                        −${action.potentialSaving}
+                      </span>
+                      <span
+                        className="text-xs px-1.5 py-0.5 rounded-full"
+                        style={{ background: `${color}12`, color, fontSize: '10px' }}>
+                        {TYPE_LABELS[action.type]}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* NOMI Bridge row */}
+                  <div
+                    className="flex items-center justify-end pt-2"
+                    style={{ borderTop: '1px solid #EEF3F8' }}>
+                    {isActioned ? (
+                      <span
+                        className="flex items-center gap-1 text-xs font-semibold"
+                        style={{ color: '#059669' }}>
+                        <CheckCircle2 size={11} />
+                        Saved to NOMI
+                      </span>
+                    ) : (
+                      <button
+                        onClick={() => handleNomiSave(action)}
+                        className="text-xs px-2.5 py-1 rounded-lg font-semibold transition-all"
+                        style={{ background: '#006AC3', color: 'white' }}
+                        onMouseEnter={(e) => (e.currentTarget.style.background = '#004A8B')}
+                        onMouseLeave={(e) => (e.currentTarget.style.background = '#006AC3')}>
+                        Save to NOMI
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Dismiss button */}
+                  {!isActioned && (
+                    <button
+                      onClick={() => setDismissed(new Set([...dismissed, action.id]))}
+                      className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-gray-100">
+                      <X size={11} style={{ color: '#8FA3B8' }} />
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         )}
       </div>
 
-      {actions.length === 0 ? (
-        <div className="text-center py-5">
-          <p className="text-xs" style={{ color: '#8FA3B8' }}>
-            {events.length === 0
-              ? 'Add events above to get personalized savings strategies.'
-              : 'No high-spend events in the next 7 days to strategize around.'}
-          </p>
-        </div>
-      ) : (
-        <div className="space-y-2">
-          {actions.map((action, i) => {
-            const Icon = TYPE_ICONS[action.type];
-            const color = TYPE_COLOR[action.type];
-            return (
-              <div
-                key={action.id}
-                className="rounded-xl p-3 group relative slide-up flex items-start gap-2.5"
-                style={{ animationDelay: `${i * 0.05}s`, background: '#F8FAFC', border: '1px solid #E5EDF5' }}>
-                <div
-                  className="w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5"
-                  style={{ background: `${color}15` }}>
-                  <Icon size={12} style={{ color }} />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="text-xs truncate mb-0.5" style={{ color: '#8FA3B8' }}>{action.eventTitle}</div>
-                  <p className="text-xs leading-relaxed" style={{ color: '#0F1923' }}>{action.suggestion}</p>
-                </div>
-                <div className="flex-shrink-0 flex flex-col items-end gap-1">
-                  <span className="text-xs font-bold font-mono" style={{ color: '#059669' }}>
-                    −${action.potentialSaving}
-                  </span>
-                  <span
-                    className="text-xs px-1.5 py-0.5 rounded-full"
-                    style={{ background: `${color}12`, color, fontSize: '10px' }}>
-                    {TYPE_LABELS[action.type]}
-                  </span>
-                </div>
-                <button
-                  onClick={() => setDismissed(new Set([...dismissed, action.id]))}
-                  className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-gray-100">
-                  <X size={11} style={{ color: '#8FA3B8' }} />
-                </button>
-              </div>
-            );
-          })}
+      {/* ── NOMI toast ── */}
+      {nomiToast && (
+        <div
+          className="fixed bottom-6 right-6 z-50 max-w-sm rounded-2xl px-4 py-3 flex items-center gap-2.5 slide-up"
+          style={{
+            background: '#006AC3',
+            color: 'white',
+            boxShadow: '0 8px 30px rgba(0,106,195,0.35)',
+          }}>
+          <CheckCircle2 size={15} style={{ flexShrink: 0 }} />
+          <p className="text-xs font-semibold">{nomiToast}</p>
         </div>
       )}
-    </div>
+    </>
   );
 }

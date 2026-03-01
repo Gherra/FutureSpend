@@ -133,22 +133,22 @@ export default function SavingsStrategies({ events, actioned, onNomiAction, rese
               return (
                 <div
                   key={action.id}
-                  className="rounded-xl p-3 group relative slide-up"
+                  className="rounded-xl px-3 py-2 group relative slide-up"
                   style={{
                     animationDelay: `${i * 0.05}s`,
                     background: isActioned ? '#F0FDF4' : '#F8FAFC',
                     border: `1px solid ${isActioned ? '#A7E8CB' : '#E5EDF5'}`,
                   }}>
-                  {/* Main row */}
-                  <div className="flex items-start gap-2.5 mb-2.5">
+                  {/* Main row: icon + text + savings/badge */}
+                  <div className="flex items-start gap-2 mb-1.5">
                     <div
-                      className="w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5"
+                      className="w-5 h-5 rounded-md flex items-center justify-center flex-shrink-0 mt-0.5"
                       style={{ background: `${color}15` }}>
-                      <Icon size={12} style={{ color }} />
+                      <Icon size={11} style={{ color }} />
                     </div>
-                    <div className="flex-1 min-w-0 pr-5">
-                      <div className="text-xs truncate mb-0.5" style={{ color: '#8FA3B8' }}>{action.eventTitle}</div>
-                      <p className="text-xs leading-relaxed" style={{ color: '#0F1923' }}>{action.suggestion}</p>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-xs font-semibold mb-0.5" style={{ color: '#0F1923' }}>{action.eventTitle}</div>
+                      <p className="text-xs leading-relaxed" style={{ color: '#5A6880' }}>{action.suggestion}</p>
                     </div>
                     <div className="flex-shrink-0 flex flex-col items-end gap-1">
                       <span className="text-xs font-bold font-mono" style={{ color: '#059669' }}>
@@ -162,21 +162,19 @@ export default function SavingsStrategies({ events, actioned, onNomiAction, rese
                     </div>
                   </div>
 
-                  {/* NOMI Bridge row */}
+                  {/* Bottom row: Save to NOMI */}
                   <div
-                    className="flex items-center justify-end pt-2"
+                    className="flex items-center justify-end pt-1.5"
                     style={{ borderTop: '1px solid #EEF3F8' }}>
                     {isActioned ? (
-                      <span
-                        className="flex items-center gap-1 text-xs font-semibold"
-                        style={{ color: '#059669' }}>
+                      <span className="flex items-center gap-1 text-xs font-semibold" style={{ color: '#059669' }}>
                         <CheckCircle2 size={11} />
                         Saved to NOMI
                       </span>
                     ) : (
                       <button
                         onClick={() => handleNomiSave(action)}
-                        className="text-xs px-2.5 py-1 rounded-lg font-semibold transition-all"
+                        className="text-xs px-2.5 py-0.5 rounded-lg font-semibold transition-all"
                         style={{ background: '#006AC3', color: 'white' }}
                         onMouseEnter={(e) => (e.currentTarget.style.background = '#004A8B')}
                         onMouseLeave={(e) => (e.currentTarget.style.background = '#006AC3')}>
@@ -185,12 +183,14 @@ export default function SavingsStrategies({ events, actioned, onNomiAction, rese
                     )}
                   </div>
 
-                  {/* Dismiss button */}
+                  {/* Dismiss */}
                   {!isActioned && (
                     <button
                       onClick={() => setDismissed(new Set([...dismissed, action.id]))}
-                      className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-gray-100">
-                      <X size={11} style={{ color: '#8FA3B8' }} />
+                      className="absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded"
+                      onMouseEnter={(e) => (e.currentTarget.style.background = '#F0F4F8')}
+                      onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}>
+                      <X size={10} style={{ color: '#8FA3B8' }} />
                     </button>
                   )}
                 </div>

@@ -54,7 +54,7 @@ export default function Leaderboard({ friends, totalSpend, resetKey }: Props) {
       </div>
 
       {/* Rankings */}
-      <div className="space-y-1 mb-4">
+      <div className="mb-3">
         {sorted.map((friend, i) => {
           const isUser = friend.name === 'You';
           const isOver = friend.weeklySpend > 120;
@@ -63,80 +63,79 @@ export default function Leaderboard({ friends, totalSpend, resetKey }: Props) {
           return (
             <div
               key={friend.name}
-              className="flex items-center gap-2.5 px-3 py-2 rounded-xl transition-all"
+              className="flex items-center gap-2.5 py-2"
               style={{
-                background: isUser ? '#E8F2FB' : 'transparent',
-                border: isUser ? '1px solid #B8D8F4' : '1px solid transparent',
+                borderTop: i === 0 ? 'none' : '1px solid #EEF3F8',
+                borderLeft: isUser ? '3px solid #006AC3' : '3px solid transparent',
+                paddingLeft: '8px',
+                background: isUser ? '#F0F7FF' : 'transparent',
+                marginLeft: '-4px',
+                paddingRight: '4px',
               }}>
-              <div className="w-5 text-center text-sm flex-shrink-0">
-                {rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉'
-                  : <span className="text-xs font-mono" style={{ color: '#8FA3B8' }}>#{rank}</span>}
-              </div>
+              {/* Rank */}
+              <span
+                className="w-5 text-xs font-bold font-mono flex-shrink-0 text-right"
+                style={{ color: rank === 1 ? '#D97706' : '#B8CCE0' }}>
+                #{rank}
+              </span>
 
+              {/* Avatar */}
               <div
-                className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0"
+                className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0"
                 style={{
-                  background: isUser ? '#006AC3' : isOver ? '#FEE2E2' : '#E6F9F0',
-                  color: isUser ? 'white' : isOver ? '#DC2626' : '#059669',
+                  background: isUser ? '#006AC3' : '#E8EFF6',
+                  color: isUser ? 'white' : '#5A6880',
                 }}>
                 {friend.avatar}
               </div>
 
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-xs font-semibold" style={{ color: isUser ? '#006AC3' : '#0F1923' }}>
-                    {friend.name}
-                  </span>
-                  {friend.streak > 0 && (
-                    <span className="text-xs" style={{ color: '#EA580C' }}>🔥{friend.streak}</span>
-                  )}
-                </div>
-              </div>
+              {/* Name */}
+              <span
+                className="flex-1 text-xs min-w-0"
+                style={{
+                  color: isUser ? '#006AC3' : '#0F1923',
+                  fontWeight: isUser ? 700 : 500,
+                }}>
+                {friend.name}
+              </span>
 
-              <div className="text-right">
-                <span className="text-xs font-mono font-bold"
-                  style={{ color: isOver ? '#DC2626' : '#059669' }}>
-                  ${friend.weeklySpend}
-                </span>
-                <div className="text-xs" style={{ color: '#8FA3B8' }}>/wk</div>
-              </div>
+              {/* Spend */}
+              <span
+                className="text-xs font-mono font-bold flex-shrink-0"
+                style={{ color: isOver ? '#DC2626' : '#059669' }}>
+                ${friend.weeklySpend}
+              </span>
             </div>
           );
         })}
       </div>
 
       {/* Divider */}
-      <div className="mb-3" style={{ borderTop: '1px solid #EEF3F8' }} />
+      <div className="mb-2.5" style={{ borderTop: '1px solid #EEF3F8' }} />
 
       {/* ── Community challenge banner ── */}
       <div
-        className="rounded-xl p-3 mb-3"
+        className="flex items-center gap-2 px-3 py-2 rounded-xl mb-3"
         style={{ background: '#E8F2FB', border: '1px solid #B8D8F4' }}>
-        <div className="flex items-start justify-between gap-2">
-          <div className="flex-1 min-w-0">
-            <p className="text-xs font-bold mb-0.5" style={{ color: '#0F1923' }}>
-              This week's community challenge
-            </p>
-            <p className="text-xs leading-relaxed" style={{ color: '#5A6880' }}>
-              Can you keep Social spending under $50 this weekend?{' '}
-              <span className="font-semibold" style={{ color: '#006AC3' }}>{communityCount} people</span> are trying.
-            </p>
-          </div>
-          <button
-            onClick={handleCommunityToggle}
-            className="flex-shrink-0 text-xs px-2.5 py-1 rounded-lg font-semibold transition-all"
-            style={joinedCommunity ? {
-              background: '#E6F9F0',
-              color: '#059669',
-              border: '1px solid #A7E8CB',
-            } : {
-              background: '#006AC3',
-              color: 'white',
-              border: '1px solid #006AC3',
-            }}>
-            {joinedCommunity ? '✓ Joined' : 'Join'}
-          </button>
-        </div>
+        <p className="text-xs flex-1 min-w-0" style={{ color: '#5A6880' }}>
+          <span className="font-semibold" style={{ color: '#0F1923' }}>Community: </span>
+          Social under $50 this weekend —{' '}
+          <span className="font-semibold" style={{ color: '#006AC3' }}>{communityCount} joined</span>
+        </p>
+        <button
+          onClick={handleCommunityToggle}
+          className="flex-shrink-0 text-xs px-2.5 py-1 rounded-lg font-semibold transition-all"
+          style={joinedCommunity ? {
+            background: '#E6F9F0',
+            color: '#059669',
+            border: '1px solid #A7E8CB',
+          } : {
+            background: '#006AC3',
+            color: 'white',
+            border: '1px solid #006AC3',
+          }}>
+          {joinedCommunity ? '✓ Joined' : 'Join'}
+        </button>
       </div>
 
       {/* Challenges */}
